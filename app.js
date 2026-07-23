@@ -253,7 +253,7 @@ app.get('/car/:id', (req, res) => {
         LEFT JOIN users u
             ON c.user_id = u.user_id
         WHERE c.car_id = ?
-            AND c.status = 'approved'
+            AND c.status IN ('approved', 'sold')
     `;
 
     connection.query(sql, [carId], (error, results) => {
@@ -288,9 +288,11 @@ app.post('/add-car', isAuthenticated, upload.single('image'), (req, res) => {
         image = req.file.filename;
     }
 
-    const sql = `INSERT INTO cars (user_id, name, make, model, year, color, price, description, image) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
+    const sql = `
+    INSERT INTO cars
+    (user_id, name, make, model, year, color, price, description, image, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+`;
     connection.query(sql, [userId, name, make, model, year, color, price, description, image], (error, results) => {
         if (error) {
             console.error('Error:', error);
@@ -492,6 +494,164 @@ app.get('/favorites', isAuthenticated, (req, res) => {
         res.render('favorites', {
             cars: results
         });
+    });
+});
+
+// ============================================
+// ADMIN - VIEW PENDING CARS
+// ============================================
+app.get('/admin/pending-cars', isAuthenticated, isAdmin, (req, res) => {
+    const sql = `
+        SELECT c.*, u.username
+        FROM cars c
+        LEFT JOIN users u
+            ON c.user_id = u.user_id
+        WHERE c.status = 'pending'
+        ORDER BY c.created_at DESC
+    `;
+
+    connection.query(sql, (error, results) => {
+        if (error) {
+            console.error('Error retrieving pending cars:', error);
+            return res.status(500).send('Error retrieving pending cars');
+        }
+
+        res.render('pendingCars', {
+            cars: results
+        });
+    });
+});
+
+
+// ============================================
+// ADMIN - APPROVE CAR
+// ============================================
+app.post('/admin/approve-car/:id', isAuthenticated, isAdmin, (req, res) => {
+    const carId = req.params.id;
+
+    const sql = `
+        UPDATE cars
+        SET status = 'approved'
+        WHERE car_id = ?
+    `;
+
+    connection.query(sql, [carId], (error) => {
+        if (error) {
+            console.error('Error approving car:', error);
+            return res.status(500).send('Error approving car');
+        }
+
+        res.redirect('/admin/pending-cars');
+    });
+});
+
+// ============================================
+// ADMIN - REJECT CAR
+// ============================================
+app.post('/admin/reject-car/:id', isAuthenticated, isAdmin, (req, res) => {
+    const carId = req.params.id;
+
+    const sql = `
+        UPDATE cars
+        SET status = 'rejected'
+        WHERE car_id = ?
+    `;
+
+    connection.query(sql, [carId], (error) => {
+        if (error) {
+            console.error('Error rejecting car:', error);
+            return res.status(500).send('Error rejecting car');
+        }
+
+        res.redirect('/admin/pending-cars');
+    });
+});
+
+// ============================================
+// BUY CAR PAGE
+// ============================================
+app.get('/buy-car/:id', isAuthenticated, (req, res) => {
+    const carId = req.params.id;
+
+    const sql = `
+        SELECT c.*, u.username
+        FROM cars c
+        LEFT JOIN users u
+            ON c.user_id = u.user_id
+        WHERE c.car_id = ?
+        AND c.status = 'approved'
+    `;
+
+    connection.query(sql, [carId], (error, results) => {
+        if (error) {
+            console.error('Error retrieving car:', error);
+            return res.status(500).send('Error retrieving car');
+        }
+
+        if (results.length === 0) {
+            return res.status(404).send('Car not found or not approved');
+        }
+
+        res.render('buyCar', {
+            car: results[0]
+        });
+    });
+});
+
+// ============================================
+// SUBMIT PURCHASE REQUEST
+// ============================================
+app.post('/buy-car/:id', isAuthenticated, (req, res) => {
+    const carId = req.params.id;
+    const buyerId = req.session.user.user_id;
+
+    const {
+        buyerName,
+        buyerEmail,
+        buyerPhone,
+        message
+    } = req.body;
+
+    const sql = `
+        INSERT INTO purchases
+        (
+            car_id,
+            buyer_id,
+            buyer_name,
+            buyer_email,
+            buyer_phone,
+            message,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    `;
+
+    connection.query(
+        sql,
+        [
+            carId,
+            buyerId,
+            buyerName,
+            buyerEmail,
+            buyerPhone,
+            message
+        ],
+        (error) => {
+            if (error) {
+                console.error('Error submitting purchase:', error);
+                return res.status(500).send(
+                    'Error submitting purchase request'
+                );
+            }
+
+            res.redirect(`/purchase-success/${carId}`);
+        }
+    );
+});
+
+app.get('/purchase-success/:id', isAuthenticated, (req, res) => {
+    res.render('purchaseSuccess', {
+        carId: req.params.id
     });
 });
 

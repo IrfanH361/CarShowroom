@@ -1,0 +1,155 @@
+<%- include('partials/header') %>
+
+<div class="container py-4">
+
+    <!-- Back button -->
+    <div class="mb-3">
+        <a href="/" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div class="card shadow">
+        <div class="row g-0">
+
+            <!-- Car image -->
+            <div class="col-md-6 bg-light">
+                <% if (car.image) { %>
+                    <img
+                        src="/images/<%= car.image %>"
+                        class="w-100 h-100 rounded-start"
+                        style="
+                            min-height: 650px;
+                            object-fit: cover;
+                        "
+                        alt="<%= car.name %>"
+                    >
+                <% } else { %>
+                    <img
+                        src="https://via.placeholder.com/700x500?text=No+Image"
+                        class="w-100 h-100 rounded-start"
+                        style="
+                            min-height: 650px;
+                            object-fit: cover;
+                        "
+                        alt="No image"
+                    >
+                <% } %>
+            </div>
+
+            <!-- Purchase form -->
+            <div class="col-md-6">
+                <div class="card-body p-4">
+
+                    <h2 class="mb-3">
+                        Buy <%= car.name %>
+                    </h2>
+
+                    <p class="text-muted">
+                        <%= car.make %> <%= car.model %>
+                    </p>
+
+                    <h3 class="text-success mb-4">
+                        $<%= Number(car.price).toLocaleString() %>
+                    </h3>
+
+                    <hr>
+
+                    <p>
+                        <strong>Year:</strong>
+                        <%= car.year %>
+                    </p>
+
+                    <p>
+                        <strong>Colour:</strong>
+                        <%= car.color %>
+                    </p>
+
+                    <p>
+                        <strong>Seller:</strong>
+                        <%= car.username || 'Unknown' %>
+                    </p>
+
+                    <form
+                        action="/buy-car/<%= car.car_id %>"
+                        method="POST"
+                    >
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Full Name
+                            </label>
+
+                            <input
+                                type="text"
+                                name="buyerName"
+                                class="form-control"
+                                required
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Email
+                            </label>
+
+                            <input
+                                type="email"
+                                name="buyerEmail"
+                                class="form-control"
+                                value="<%= user ? user.email : '' %>"
+                                required
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Contact Number
+                            </label>
+
+                            <input
+                                type="tel"
+                                name="buyerPhone"
+                                class="form-control"
+                                required
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Message to Seller
+                            </label>
+
+                            <textarea
+                                name="message"
+                                class="form-control"
+                                rows="3"
+                                placeholder="I am interested in purchasing this car."
+                            ></textarea>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button
+                                type="submit"
+                                class="btn btn-success"
+                            >
+                                <i class="fas fa-shopping-cart"></i>
+                                Confirm Purchase Request
+                            </button>
+
+                            <a
+                                href="/"
+                                class="btn btn-secondary"
+                            >
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>
