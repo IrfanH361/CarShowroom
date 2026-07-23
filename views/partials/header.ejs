@@ -94,6 +94,26 @@
             text-align: center;
             margin-top: 50px;
         }
+
+        /* Role badge styling */
+        .role-badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 4px;
+        }
+        .role-admin {
+            background-color: #dc3545;
+            color: white;
+        }
+        .role-seller {
+            background-color: #ffc107;
+            color: black;
+        }
+        .role-user {
+            background-color: #28a745;
+            color: white;
+        }
     </style>
 </head>
 
@@ -118,39 +138,72 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
 
+                <!-- ========================================= -->
+                <!-- 1. PUBLIC - Everyone can see -->
+                <!-- ========================================= -->
                 <li class="nav-item">
                     <a class="nav-link" href="/">
                         <i class="fas fa-home"></i> Home
                     </a>
                 </li>
 
+                <!-- ========================================= -->
+                <!-- 2. LOGGED IN USERS -->
+                <!-- ========================================= -->
                 <% if (user) { %>
 
+                    <!-- ALL USERS: My Cars -->
                     <li class="nav-item">
                         <a class="nav-link" href="/dashboard">
                             <i class="fas fa-warehouse"></i> My Cars
                         </a>
                     </li>
 
+                    <!-- ALL USERS: Favourites -->
                     <li class="nav-item">
                         <a class="nav-link" href="/favorites">
                             <i class="fas fa-heart"></i> Favourites
                         </a>
                     </li>
 
-                    <li class="nav-item">
-                        <a class="nav-link" href="/add-car">
-                            <i class="fas fa-plus"></i> Add Car
-                        </a>
-                    </li>
+                    <!-- ========================================= -->
+                    <!-- 3. SELLER + ADMIN ONLY -->
+                    <!-- ========================================= -->
+                    <% if (user.role === 'seller' || user.role === 'admin') { %>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/sell-car">
+                                <i class="fas fa-tag"></i> Sell Car
+                            </a>
+                        </li>
+                    <% } %>
 
+                    <!-- ========================================= -->
+                    <!-- 4. ADMIN ONLY -->
+                    <!-- ========================================= -->
+                    <% if (user.role === 'admin') { %>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/pending-cars">
+                                <i class="fas fa-clock"></i> Pending Approvals
+                            </a>
+                        </li>
+                    <% } %>
+
+                    <!-- ========================================= -->
+                    <!-- 5. LOGOUT - Everyone -->
+                    <!-- ========================================= -->
                     <li class="nav-item">
                         <a class="nav-link" href="/logout">
                             <i class="fas fa-sign-out-alt"></i>
-                            Logout (<%= user.username %>)
+                            Logout (<%= user.username %>
+                            <span class="role-badge role-<%= user.role %>">
+                                <%= user.role %>
+                            </span>)
                         </a>
                     </li>
 
+                <!-- ========================================= -->
+                <!-- 6. NOT LOGGED IN - Login/Register -->
+                <!-- ========================================= -->
                 <% } else { %>
 
                     <li class="nav-item">
@@ -172,3 +225,6 @@
 
     </div>
 </nav>
+
+<!-- START CONTAINER DIV - This must be closed by footer -->
+<div class="container mt-4">

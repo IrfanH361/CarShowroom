@@ -13,15 +13,23 @@
                 <form action="/register" method="POST">
                     <div class="mb-3">
                         <label class="form-label">Username</label>
-                        <input type="text" name="username" class="form-control" required>
+                        <input type="text" name="username" class="form-control" placeholder="Choose a username" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-control" required>
+                        <input type="email" name="email" class="form-control" placeholder="Enter your email" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control" required>
+                        <input type="password" name="password" class="form-control" placeholder="Create a password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Register as</label>
+                        <select name="role" class="form-select" required>
+                            <option value="user">👤 User - Browse and buy cars</option>
+                            <option value="seller">🏷️ Seller - List cars for sale (needs admin approval)</option>
+                        </select>
+                        <small class="text-muted">Admins are created by the system administrator only.</small>
                     </div>
                     <button type="submit" class="btn btn-success w-100">Register</button>
                 </form>
