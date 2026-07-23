@@ -7,7 +7,7 @@ const multer = require('multer');
 const app = express();
 
 // ============================================
-// DATABASE CONNECTION
+// DATABASE CONNECTION (HARDCODED PASSWORD)
 // ============================================
 const connection = mysql.createConnection({
     host: 'c237-eaint-mysql.mysql.database.azure.com',
@@ -17,6 +17,7 @@ const connection = mysql.createConnection({
     ssl: {
         rejectUnauthorized: false
     }
+
 });
 
 connection.connect((err) => {
@@ -34,6 +35,7 @@ app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
+// Session setup
 app.use(session({
     secret: 'your-secret-key',
     resave: false,
@@ -42,7 +44,7 @@ app.use(session({
 }));
 
 // ============================================
-// MULTER SETUP
+// MULTER SETUP (Image Upload)
 // ============================================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -69,14 +71,6 @@ function isAdmin(req, res, next) {
         return next();
     }
     res.status(403).send('Access denied. Admin only.');
-}
-
-function isSellerOrAdmin(req, res, next) {
-    const role = req.session.user?.role;
-    if (role === 'admin' || role === 'seller') {
-        return next();
-    }
-    res.status(403).send('Access denied. Sellers and Admins only.');
 }
 
 function isOwnerOrAdmin(req, res, next) {
@@ -109,7 +103,7 @@ app.use((req, res, next) => {
 });
 
 // ============================================
-// ROUTES - HOME (Only shows APPROVED cars)
+// ROUTES - HOME (FIXED V2)
 // ============================================
 app.get('/', (req, res) => {
     const userId = req.session.user?.user_id;
@@ -127,15 +121,14 @@ app.get('/', (req, res) => {
                 AND f.user_id = ?
             ) AS is_favorite
             FROM cars c
-            WHERE c.status = 'approved'
             ORDER BY c.created_at DESC
         `;
+
         params = [userId];
     } else {
         sql = `
             SELECT c.*, 0 AS is_favorite
             FROM cars c
-            WHERE c.status = 'approved'
             ORDER BY c.created_at DESC
         `;
     }
@@ -145,6 +138,7 @@ app.get('/', (req, res) => {
             console.error('Error:', error);
             return res.send('Error retrieving cars');
         }
+
         res.render('index', {
             cars: results,
             query: ''
@@ -163,13 +157,12 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', async (req, res) => {
-    const { username, email, password, role } = req.body;
-    const userRole = role || 'user';
+    const { username, email, password } = req.body;
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        const sql = 'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)';
-        connection.query(sql, [username, email, hashedPassword, userRole], (error, results) => {
+        const sql = 'INSERT INTO users (username, email, password) VALUES (?, ?, ?)';
+        connection.query(sql, [username, email, hashedPassword], (error, results) => {
             if (error) {
                 console.error('Error:', error);
                 return res.render('register', { error: 'Username or email already exists.' });
@@ -253,132 +246,67 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
 // ============================================
 app.get('/car/:id', (req, res) => {
     const carId = req.params.id;
-    const sql = `SELECT c.*, u.username 
-                 FROM cars c 
-                 LEFT JOIN users u ON c.user_id = u.user_id 
-                 WHERE c.car_id = ? AND c.status = 'approved'`;
+
+    const sql = `
+        SELECT c.*, u.username
+        FROM cars c
+        LEFT JOIN users u
+            ON c.user_id = u.user_id
+        WHERE c.car_id = ?
+            AND c.status = 'approved'
+    `;
 
     connection.query(sql, [carId], (error, results) => {
-        if (error || results.length === 0) {
+        if (error) {
+            console.error('Error retrieving car details:', error);
+            return res.send('Error retrieving car details');
+        }
+
+        if (results.length === 0) {
             return res.send('Car not found or not approved');
         }
-        res.render('carDetails', { car: results[0] });
-    });
-});
 
-// ============================================
-// ROUTES - BUY CAR (USER only)
-// ============================================
-app.post('/buy-car/:id', isAuthenticated, (req, res) => {
-    const carId = req.params.id;
-    const userId = req.session.user.user_id;
-    const role = req.session.user.role;
-
-    // Only users can buy (not sellers or admins)
-    if (role !== 'user') {
-        return res.status(403).send('Only users can buy cars.');
-    }
-
-    // Check if car exists and is approved
-    const checkSql = 'SELECT * FROM cars WHERE car_id = ? AND status = "approved"';
-    connection.query(checkSql, [carId], (error, results) => {
-        if (error || results.length === 0) {
-            return res.status(404).send('Car not found or not available for purchase');
-        }
-
-        // Update car status to 'sold'
-        const updateSql = 'UPDATE cars SET status = "sold" WHERE car_id = ?';
-        connection.query(updateSql, [carId], (error, results) => {
-            if (error) {
-                console.error('Error buying car:', error);
-                return res.status(500).send('Error processing purchase');
-            }
-            res.redirect('/');
+        res.render('carDetails', {
+            car: results[0]
         });
     });
 });
 
 // ============================================
-// ROUTES - SELL CAR (Sellers and Admins)
+// ROUTES - ADD CAR
 // ============================================
-app.get('/sell-car', isAuthenticated, isSellerOrAdmin, (req, res) => {
-    res.render('sellCar', { error: null });
+app.get('/add-car', isAuthenticated, (req, res) => {
+    res.render('addCar', { error: null });
 });
 
-app.post('/sell-car', isAuthenticated, isSellerOrAdmin, upload.single('image'), (req, res) => {
+app.post('/add-car', isAuthenticated, upload.single('image'), (req, res) => {
     const { name, make, model, year, color, price, description } = req.body;
     const userId = req.session.user.user_id;
-    const role = req.session.user.role;
     let image = null;
 
     if (req.file) {
         image = req.file.filename;
     }
 
-    // If admin, auto-approve; if seller, pending
-    const status = role === 'admin' ? 'approved' : 'pending';
+    const sql = `INSERT INTO cars (user_id, name, make, model, year, color, price, description, image) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-    const sql = `INSERT INTO cars (user_id, name, make, model, year, color, price, description, image, status) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-    connection.query(sql, [userId, name, make, model, year, color, price, description, image, status], (error, results) => {
+    connection.query(sql, [userId, name, make, model, year, color, price, description, image], (error, results) => {
         if (error) {
             console.error('Error:', error);
-            return res.render('sellCar', { error: 'Error adding car for sale. Please try again.' });
+            return res.render('addCar', { error: 'Error adding car. Please try again.' });
         }
-
-        if (role === 'admin') {
-            res.redirect('/dashboard');
-        } else {
-            res.redirect('/dashboard');
-        }
+        res.redirect('/dashboard');
     });
 });
 
 // ============================================
-// ROUTES - ADMIN APPROVE/REJECT CARS
-// ============================================
-app.get('/admin/pending-cars', isAuthenticated, isAdmin, (req, res) => {
-    const sql = 'SELECT c.*, u.username FROM cars c JOIN users u ON c.user_id = u.user_id WHERE c.status = "pending" ORDER BY c.created_at DESC';
-    connection.query(sql, (error, results) => {
-        if (error) {
-            console.error('Error:', error);
-            return res.send('Error retrieving pending cars');
-        }
-        res.render('pendingCars', { cars: results });
-    });
-});
-
-app.post('/admin/approve-car/:id', isAuthenticated, isAdmin, (req, res) => {
-    const carId = req.params.id;
-    const sql = 'UPDATE cars SET status = "approved" WHERE car_id = ?';
-    connection.query(sql, [carId], (error, results) => {
-        if (error) {
-            console.error('Error:', error);
-            return res.send('Error approving car');
-        }
-        res.redirect('/admin/pending-cars');
-    });
-});
-
-app.post('/admin/reject-car/:id', isAuthenticated, isAdmin, (req, res) => {
-    const carId = req.params.id;
-    const sql = 'UPDATE cars SET status = "rejected" WHERE car_id = ?';
-    connection.query(sql, [carId], (error, results) => {
-        if (error) {
-            console.error('Error:', error);
-            return res.send('Error rejecting car');
-        }
-        res.redirect('/admin/pending-cars');
-    });
-});
-
-// ============================================
-// ROUTES - EDIT CAR (Owner or Admin)
+// ROUTES - EDIT CAR
 // ============================================
 app.get('/edit-car/:id', isAuthenticated, isOwnerOrAdmin, (req, res) => {
     const carId = req.params.id;
     const sql = 'SELECT * FROM cars WHERE car_id = ?';
+
     connection.query(sql, [carId], (error, results) => {
         if (error || results.length === 0) {
             return res.send('Car not found');
@@ -410,10 +338,11 @@ app.post('/edit-car/:id', isAuthenticated, isOwnerOrAdmin, upload.single('image'
 });
 
 // ============================================
-// ROUTES - DELETE CAR (Owner or Admin)
+// ROUTES - DELETE CAR
 // ============================================
 app.get('/delete-car/:id', isAuthenticated, isOwnerOrAdmin, (req, res) => {
     const carId = req.params.id;
+
     const sql = 'DELETE FROM cars WHERE car_id = ?';
     connection.query(sql, [carId], (error, results) => {
         if (error) {
@@ -425,7 +354,7 @@ app.get('/delete-car/:id', isAuthenticated, isOwnerOrAdmin, (req, res) => {
 });
 
 // ============================================
-// ROUTES - SEARCH
+// ROUTES - SEARCH (FIXED V2)
 // ============================================
 app.get('/search', (req, res) => {
     const { query, make, year } = req.query;
@@ -444,19 +373,27 @@ app.get('/search', (req, res) => {
                 AND f.user_id = ?
             ) AS is_favorite
             FROM cars c
-            WHERE c.status = 'approved'
+            WHERE 1 = 1
         `;
+
         params.push(userId);
     } else {
         sql = `
             SELECT c.*, 0 AS is_favorite
             FROM cars c
-            WHERE c.status = 'approved'
+            WHERE 1 = 1
         `;
     }
 
     if (query) {
-        sql += ` AND (c.name LIKE ? OR c.make LIKE ? OR c.model LIKE ?)`;
+        sql += `
+            AND (
+                c.name LIKE ?
+                OR c.make LIKE ?
+                OR c.model LIKE ?
+            )
+        `;
+
         const searchValue = `%${query}%`;
         params.push(searchValue, searchValue, searchValue);
     }
@@ -478,6 +415,7 @@ app.get('/search', (req, res) => {
             console.error('Search error:', error);
             return res.send('Error searching cars');
         }
+
         res.render('index', {
             cars: results,
             query: query || ''
@@ -486,44 +424,62 @@ app.get('/search', (req, res) => {
 });
 
 // ============================================
-// ROUTES - FAVOURITES
+// ROUTES - FAVOURITE CARS
 // ============================================
+
+// Add a car to favourites
 app.post('/favorite/:id', isAuthenticated, (req, res) => {
     const carId = req.params.id;
     const userId = req.session.user.user_id;
 
-    const sql = `INSERT IGNORE INTO favorites (user_id, car_id) VALUES (?, ?)`;
+    const sql = `
+        INSERT IGNORE INTO favorites (user_id, car_id)
+        VALUES (?, ?)
+    `;
+
     connection.query(sql, [userId, carId], (error) => {
         if (error) {
             console.error('Error adding favourite:', error);
             return res.status(500).send('Error adding car to favourites');
         }
+
+        // Return to previous page
         res.redirect(req.get('referer') || '/');
     });
 });
 
+
+// Remove a car from favourites
 app.post('/favorite/remove/:id', isAuthenticated, (req, res) => {
     const carId = req.params.id;
     const userId = req.session.user.user_id;
 
-    const sql = `DELETE FROM favorites WHERE user_id = ? AND car_id = ?`;
+    const sql = `
+        DELETE FROM favorites
+        WHERE user_id = ? AND car_id = ?
+    `;
+
     connection.query(sql, [userId, carId], (error) => {
         if (error) {
             console.error('Error removing favourite:', error);
             return res.status(500).send('Error removing favourite');
         }
+
         res.redirect(req.get('referer') || '/favorites');
     });
 });
 
+
+// Display the user's favourite cars
 app.get('/favorites', isAuthenticated, (req, res) => {
     const userId = req.session.user.user_id;
 
     const sql = `
         SELECT c.*, 1 AS is_favorite
         FROM cars c
-        INNER JOIN favorites f ON c.car_id = f.car_id
-        WHERE f.user_id = ? AND c.status = 'approved'
+        INNER JOIN favorites f
+            ON c.car_id = f.car_id
+        WHERE f.user_id = ?
         ORDER BY f.created_at DESC
     `;
 
@@ -532,7 +488,10 @@ app.get('/favorites', isAuthenticated, (req, res) => {
             console.error('Error retrieving favourites:', error);
             return res.status(500).send('Error retrieving favourite cars');
         }
-        res.render('favorites', { cars: results });
+
+        res.render('favorites', {
+            cars: results
+        });
     });
 });
 
